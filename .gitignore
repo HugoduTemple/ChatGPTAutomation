@@ -9,3 +9,4 @@ mytest/
 test.py
 .idea/
 chromedriver/
+.venv/
