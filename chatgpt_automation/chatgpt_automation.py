@@ -23,7 +23,8 @@ logging.basicConfig(filename='chatgpt_automation.log', level=logging.INFO,
 
 
 class ChatGPTLocators:
-    MSG_BOX_INPUT = (By.CSS_SELECTOR, 'textarea#prompt-textarea')
+    # MSG_BOX_INPUT = (By.CSS_SELECTOR, 'textarea#prompt-textarea')
+    MSG_BOX_INPUT = (By.CSS_SELECTOR, "p[data-placeholder='Message ChatGPT']")
     MSG_BOX_INPUT2 = (By.TAG_NAME, 'textarea')
 
     SEND_MSG_BTN = (By.XPATH, "//*[contains(@data-testid, 'send-button')]")
@@ -64,7 +65,9 @@ class ChatGPTLocators:
     GMAIL_PASSWORD_NEXT_BTN = (By.ID, 'passwordNext')
     ADD_NEW_GMAIL_BTN = (By.XPATH, '//li[contains(.,"Use another account")]')
 
-    RESPONSE_DIV = (By.CLASS_NAME, "markdown")
+    # RESPONSE_DIV = (By.CLASS_NAME, "markdown")
+    RESPONSE_DIV = (By.CSS_SELECTOR, "div.markdown.prose.w-full.break-words")
+
 
     FILE_UPLOAD_BTN = (By.XPATH, "//button[@aria-disabled='false']")
     FILE_UPLOAD_BTN_SELECT_SUB_MENU = (By.XPATH, "//div[@role='menuitem' and contains(text(), 'Upload from computer')]")
@@ -75,21 +78,21 @@ class ChatGPTLocators:
 
 class ChatGPTAutomation:
     class DelayTimes:
-        CONSTRUCTOR_DELAY = 6
-        SEND_PROMPT_DELAY = 20
-        UPLOAD_FILE_DELAY = 10
-        RETURN_LAST_RESPONSE_DELAY = 2
-        OPEN_NEW_CHAT_DELAY = 10
+        CONSTRUCTOR_DELAY = 4
+        SEND_PROMPT_DELAY = 3
+        UPLOAD_FILE_DELAY = 5
+        RETURN_LAST_RESPONSE_DELAY = 5
+        OPEN_NEW_CHAT_DELAY = 3
         DEL_CURRENT_CHAT_OPEN_MENU_DELAY = 3
-        DEL_CURRENT_CHAT_AFTER_DELETE_DELAY = 5
-        DEL_CURRENT_CHAT_BEFORE_OPEN_NEW_CHAT_DELAY = 5
-        CHECK_RESPONSE_STATUS_DELAY = 7
+        DEL_CURRENT_CHAT_AFTER_DELETE_DELAY = 3
+        DEL_CURRENT_CHAT_BEFORE_OPEN_NEW_CHAT_DELAY = 3
+        CHECK_RESPONSE_STATUS_DELAY = 4
         LOGIN_USING_GMAIL_CLICK_DELAY = 6
-        GMAIL_SELECT_DELAY = 25
+        GMAIL_SELECT_DELAY = 5
         AFTER_LOGIN_CLICK_DELAY = 5
         ADD_GMAIL_CLICK_DELAY = 3
         GMAIL_NEXT_CLICK_DELAY = 5
-        GMAIL_PASSWORD_NEXT_CLICK_DELAY = 11
+        GMAIL_PASSWORD_NEXT_CLICK_DELAY = 7
 
 
     def __init__(self, chrome_path=None, chrome_driver_path=None, username: str = None, password: str=None, user_data_dir= "remote-profile"):
@@ -172,7 +175,6 @@ class ChatGPTAutomation:
             else:
                 username = self.username
                 password = self.password
-
         login_btn = self.driver.find_element(*ChatGPTLocators.LOGIN_BTN)
         login_btn.click()
 
@@ -306,17 +308,44 @@ class ChatGPTAutomation:
 
         try:
             # Locate the input box element on the webpage
-            input_box = self.driver.find_element(*ChatGPTLocators.MSG_BOX_INPUT)
+            # input_box = self.driver.find_element(*ChatGPTLocators.MSG_BOX_INPUT)
+            input_box = WebDriverWait(self.driver, 15).until(
+                EC.element_to_be_clickable(ChatGPTLocators.MSG_BOX_INPUT)
+            )
             input_box.click()
             self.type_in_selected_area(prompt, input_box)
             # Simulate the key press action to send the prompt
-            input_box.send_keys(Keys.ENTER)
+            # input_box.send_keys(Keys.ENTER)
             # Locate and click the send button to submit the prompt
             # old code for send message now press enter for send msg
             # send_button = self.driver.find_element(*ChatGPTLocators.SEND_MSG_BTN)
-            # send_button.click()
+            send_button = WebDriverWait(self.driver, 15).until(
+                EC.element_to_be_clickable(ChatGPTLocators.SEND_MSG_BTN)
+            )
+            send_button.click()
             # Wait for the response to be generated (20 seconds)
-            time.sleep(self.DelayTimes.SEND_PROMPT_DELAY)
+            # time.sleep(self.DelayTimes.SEND_PROMPT_DELAY)
+            # WebDriverWait(self.driver, 30).until(
+            #     lambda driver: not input_box.get_attribute("value").strip()
+            # )
+
+            # Wait until the response content stops updating
+            # time.sleep(0.5)
+            WebDriverWait(self.driver, 30).until(
+                EC.presence_of_element_located(ChatGPTLocators.RESPONSE_DIV)
+            )
+            previous_response = ""
+            while True:
+                WebDriverWait(self.driver, 30).until(
+                    EC.presence_of_element_located(ChatGPTLocators.RESPONSE_DIV)
+                )
+                response_element = self.driver.find_elements(*ChatGPTLocators.RESPONSE_DIV)[-1]
+                current_response = response_element.text
+                if (current_response == previous_response and current_response != "" and current_response[0] != 'S'):  # No changes in response
+                    break
+                previous_response = current_response
+                time.sleep(0.2)  # Check every 0.5 seconds for updates
+
         except NoSuchElementException:
             if self.check_message_sent():
                 return
@@ -456,6 +485,9 @@ class ChatGPTAutomation:
         """
 
         try:
+            WebDriverWait(self.driver, 30).until(
+                EC.presence_of_element_located(ChatGPTLocators.RESPONSE_DIV)
+            )
             response = self.driver.find_elements(*ChatGPTLocators.RESPONSE_DIV)[-1]
 
             return response.text
@@ -916,4 +948,21 @@ class ChatGPTAutomation:
         except NoSuchElementException:
             return False
         return True
+    def check_message_sent(self):
+        """
+        Checks if the message was sent successfully by ensuring the input box is no longer active.
+        Returns:
+            bool: True if the message was sent, False otherwise.
+        """
+        try:
+            # Check if the input box is still active or not
+            input_box = self.driver.find_element(*ChatGPTLocators.MSG_BOX_INPUT)
+            return input_box.get_attribute("value") == ""  # If the input box is empty, the message is sent
+        except NoSuchElementException:
+            logging.error("Input box not found for checking message status.")
+            return False
+        except Exception as e:
+            logging.error(f"Unexpected error in check_message_sent: {e}")
+            return False
+
     
